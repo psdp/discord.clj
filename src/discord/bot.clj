@@ -4,7 +4,6 @@
             [clojure.core.async :refer [go >!] :as async]
             [taoensso.timbre :as timbre]
             [discord.client :as client]
-            [discord.config :as config]
             [discord.embeds :as embeds]
             [discord.http :as http]
             [discord.permissions :as perm]
@@ -13,7 +12,7 @@
 
 ;;; Defining what an Extension and a Bot is
 (defrecord Extension [command handler options])
-(defrecord DiscordBot [bot-name prefix client]
+(defrecord DiscordBot [prefix client]
   java.io.Closeable
   (close [this]
     (.close (:client this))))
@@ -127,7 +126,7 @@
   [client message prefix]
   (doseq [{:keys [command handler] :as ext} (get-extensions)]
     (let [command-string (str prefix (name command))]
-      (if (starts-with? (:content message) command-string)
+      (if (= (-> (:content message) utils/words first) command-string)
         (handler client (trim-message-command message command-string))))))
 
 (defn- build-handler-fn
@@ -143,7 +142,7 @@
 
       ;; If the message starts with the bot prefix, we'll dispatch to any extension extensions that
       ;; have been installed
-      (if (-> message :content (starts-with? prefix))
+      (when (or (nil? prefix) (-> message :content (starts-with? prefix)))
         (go
           (dispatch-to-extensions client message prefix)))
 
@@ -158,17 +157,12 @@
 (defn create-bot
   "Creates a bot that will dynamically dispatch to different extensions based on <prefix><command>
    style messages."
-  ([bot-name]
-   (create-bot bot-name (config/get-prefix) (types/configuration-auth)))
-
-  ([bot-name prefix]
-   (create-bot bot-name prefix (types/configuration-auth)))
-
-  ([bot-name prefix auth]
-   (let [handler          (build-handler-fn prefix)
-         discord-client   (client/create-discord-client auth handler)]
-     (timbre/infof "Creating bot with prefix: %s" prefix)
-     (DiscordBot. bot-name prefix discord-client))))
+  [{:keys [token command-prefix]}]
+  (let [auth (types/configuration-auth token)
+        handler          (build-handler-fn command-prefix)
+        discord-client   (client/create-discord-client auth handler)]
+    (timbre/infof "Creating bot with prefix: %s" command-prefix)
+    (DiscordBot. command-prefix discord-client)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Defining extensions and commands
@@ -346,49 +340,13 @@
          (register-extension-docs! ~(keyword command) ~(:doc m))))))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Loading and defining extensions from files
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn get-clojure-files
-  "Given a directory, returns all '.clj' files in that folder."
-  [folder]
-  (->> folder
-       (io/file)
-       (file-seq)
-       (filter (fn [f] (ends-with? f ".clj")))
-       (map (fn [f] (.getAbsolutePath f)))))
-
-(defn load-clojure-files-in-folder!
-  "Given a directory, loads all of the .clj files in that directory tree. This can be used to
-   dynamically load extensions defined with defextension or manually calling register-extension!
-   out of a folder."
-  [folder]
-  (let [clojure-files (get-clojure-files folder)]
-    (doseq [filename clojure-files]
-      (timbre/infof "Loading extensions from: %s" filename)
-      (load-file filename))))
-
-(defn load-extension-folders! []
-  (doseq [folder (config/get-extension-folders)]
-    (load-clojure-files-in-folder! folder))
-  (let [extensions# (get-extensions)]
-    (timbre/infof "Loaded %d extensions: %s."
-                  (count extensions#)
-                  (s/join ", " (map :command extensions#)))))
-
-(defmacro start
+(defn start
   "Creates a bot where the extensions are those present in all Clojure files present in the
    directories supplied. This allows you to dynamically add files to a extensions/ directory and
    have them get automatically loaded by the bot when it starts up."
-  []
-  `(do
-     ;; Loads all the clojure files in the folders supplied. Also load the builtin commands.
-     (load-extension-folders!)
-     (register-builtins!)
-
-     ;; Opens a bot with those extensions
-     (with-open [discord-bot# (create-bot ~(config/get-bot-name) ~(config/get-prefix))]
-       (while true (Thread/sleep 3000)))))
+  ([config]
+   (with-open [discord-bot (create-bot config)]
+     (while true (Thread/sleep 3000)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; These are commands that are built into the bot framework. They handle things that require
@@ -407,11 +365,11 @@
   (let [doc-embed (generate-doc-embed)]
     (pm doc-embed)))
 
-(defcommand help
-  [_ _]
-  "Look at help information for the available extensions."
-  (let [doc-embed (generate-doc-embed)]
-    (pm doc-embed)))
+;; (defcommand help
+;;   [_ _]
+;;   "Look at help information for the available extensions."
+;;   (let [doc-embed (generate-doc-embed)]
+;;     (pm doc-embed)))
 
 (declare register-builtins!)
 
@@ -422,8 +380,8 @@
     (do
       (clear-extensions!)
       (clear-handlers!)
-      (load-extension-folders!)
-      (register-builtins!)
+      ;; (load-extension-folders!)
+      ;; (register-builtins!)
       (say "Successfully reloaded all extension folders."))
     (say "You do not have permission to reload the bot!!")))
 

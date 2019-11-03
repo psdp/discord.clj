@@ -7,8 +7,7 @@
             [taoensso.timbre :as timbre]
             [discord.http :as http]
             [discord.permissions :as perm]
-            [discord.types :refer [Authenticated Snowflake ->snowflake] :as types]
-            [discord.config :as config]))
+            [discord.types :refer [Authenticated Snowflake ->snowflake] :as types]))
 
 ;;; Representing a message from the API
 (defrecord Message [content attachments embeds sent-time channel author user-mentions role-mentions

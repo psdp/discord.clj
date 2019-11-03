@@ -1,8 +1,7 @@
 (ns discord.types
   "Types returned from the Discord APIs and proper constructors to transform the API responses
    into the corresponding records"
-  (:require [discord.config :as config]
-            [clojure.data.json :as json]
+  (:require [clojure.data.json :as json]
             [gniazdo.core :as ws]))
 
 ;;; Some global constants
@@ -24,9 +23,8 @@
 
 (defn configuration-auth
   "Creates a Simple authentication record that uses the token specified in the settings file."
-  []
-  (let [auth-token (config/get-token)]
-    (SimpleAuth. auth-token)))
+  [auth-token]
+  (SimpleAuth. auth-token))
 
 
 ;;; Discord uses Snowflakes for their distinct IDs for messages, users, etc. The protocol,
