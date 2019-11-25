@@ -7,7 +7,9 @@
             [taoensso.timbre :as timbre]
             [discord.http :as http]
             [discord.permissions :as perm]
-            [discord.types :refer [Authenticated Snowflake ->snowflake] :as types]))
+            [discord.types :refer [Authenticated Snowflake ->snowflake] :as types])
+  (:import [org.eclipse.jetty.websocket.client WebSocketClient]
+           [org.eclipse.jetty.util.ssl SslContextFactory]))
 
 ;;; Representing a message from the API
 (defrecord Message [content attachments embeds sent-time channel author user-mentions role-mentions
@@ -238,8 +240,11 @@
 (defn- create-websocket
   "Creates websocket and connects to the Discord gateway."
   [gateway]
-  (let [receive-channel     (:receive-channel gateway)
-        gateway-url         (:url gateway)]
+  (let [receive-channel (:receive-channel gateway)
+        gateway-url     (:url gateway)
+        client          (new WebSocketClient (new SslContextFactory))]
+    (.setMaxTextMessageSize (.getPolicy client) Integer/MAX_VALUE)
+    (.start client)
     (ws/connect
       gateway-url
       :on-receive (fn [message]
@@ -256,7 +261,8 @@
                         (reconnect-gateway gateway))
                       (do
                         (timbre/infof "Closing Gateway websocket, not reconnecting (%d)." status)
-                        (System/exit 0)))))))
+                        (System/exit 0))))
+      :client client)))
 
 ;;; There are a few elements of state that a Discord gateway connection needs to track, such as
 ;;; its sequence number, its heartbeat interval, the websocket connection, and its I/O channels.
