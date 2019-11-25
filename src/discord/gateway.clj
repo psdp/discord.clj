@@ -249,9 +249,14 @@
       :on-close   (fn [status reason]
                     ;; The codes above 1001 denote erroreous closure states
                     ;; https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-                    (timbre/warnf "Socket closed for unexpected reason (%d): %s" status reason)
-                    (timbre/warnf "Attempting to reconnect to websocket...")
-                    (reconnect-gateway gateway)))))
+                    (if (> 1001 status)
+                      (do
+                        (timbre/warnf "Socket closed for unexpected reason (%d): %s" status reason)
+                        (timbre/warnf "Attempting to reconnect to websocket...")
+                        (reconnect-gateway gateway))
+                      (do
+                        (timbre/infof "Closing Gateway websocket, not reconnecting (%d)." status)
+                        (System/exit 0)))))))
 
 ;;; There are a few elements of state that a Discord gateway connection needs to track, such as
 ;;; its sequence number, its heartbeat interval, the websocket connection, and its I/O channels.
