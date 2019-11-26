@@ -103,3 +103,10 @@
   "Determines if a user has every required permission."
   [auth message permissions]
   (every? true? (map (partial has-permission? auth message) permissions)))
+
+(defn u-has-permission?
+  "Determines if a user has been granted a particular permission (with user and guild provided)."
+  [auth user guild permission]
+  (let [user-permissions  (compute-user-permissions auth user guild)
+        flag              (:flag permission)]
+    (= (bit-and user-permissions flag) flag)))
