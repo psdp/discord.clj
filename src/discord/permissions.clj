@@ -92,21 +92,18 @@
 
 (defn has-permission?
   "Determines if a user has been granted a particular permission."
-  [auth message permission]
-  (let [user              (:author message)
-        guild             (get-in message [:channel :guild-id])
-        user-permissions  (compute-user-permissions auth user guild)
-        flag              (:flag permission)]
-    (= (bit-and user-permissions flag) flag)))
+  ([auth message permission]
+   (let [user              (:author message)
+         guild             (get-in message [:channel :guild-id])
+         user-permissions  (compute-user-permissions auth user guild)
+         flag              (:flag permission)]
+     (= (bit-and user-permissions flag) flag)))
+  ([auth user guild permission]
+   (let [user-permissions  (compute-user-permissions auth user guild)
+         flag              (:flag permission)]
+     (= (bit-and user-permissions flag) flag))))
 
 (defn has-permissions?
   "Determines if a user has every required permission."
   [auth message permissions]
   (every? true? (map (partial has-permission? auth message) permissions)))
-
-(defn u-has-permission?
-  "Determines if a user has been granted a particular permission (with user and guild provided)."
-  [auth user guild permission]
-  (let [user-permissions  (compute-user-permissions auth user guild)
-        flag              (:flag permission)]
-    (= (bit-and user-permissions flag) flag)))
