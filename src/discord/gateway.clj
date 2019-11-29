@@ -254,7 +254,7 @@
       :on-close   (fn [status reason]
                     ;; The codes above 1001 denote erroreous closure states
                     ;; https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-                    (if (> 1001 status)
+                    (if (> 1000 status)
                       (do
                         (timbre/warnf "Socket closed for unexpected reason (%d): %s" status reason)
                         (timbre/warnf "Attempting to reconnect to websocket...")
