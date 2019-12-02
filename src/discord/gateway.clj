@@ -104,8 +104,9 @@
     (timbre/infof "Setting heartbeat interval to %d milliseconds" new-heartbeat)
     (reset! heartbeat-atom new-heartbeat)))
 
-;;; Since there is nothing to do regarding a heartback ACK message, we'll just ignore it.
-(defmethod handle-gateway-control-event :heartbeat-ack [& _])
+(defmethod handle-gateway-control-event :heartbeat-ack [discord-event {:keys [heartbeat-ack-channel]} receive-chan]
+  (async/go
+    (async/>! heartbeat-ack-channel true)))
 
 (defmethod handle-gateway-control-event :default
   [discord-event gateway receive-chan]
@@ -279,6 +280,7 @@
         seq-num                (atom 0)
         heartbeat-interval     (atom 1000)
         stop-heartbeat-channel (async/chan)
+        heartbeat-ack-channel  (async/chan)
         session-id             (atom nil)
         gateway                (build-gateway (http/get-bot-gateway auth))
         gateway                (assoc gateway
@@ -287,6 +289,7 @@
                                       :seq-num                seq-num
                                       :heartbeat-interval     heartbeat-interval
                                       :stop-heartbeat-channel stop-heartbeat-channel
+                                      :heartbeat-ack-channel  heartbeat-ack-channel
                                       :receive-channel        receive-channel
                                       :websocket              socket)
         websocket              (create-websocket gateway)]
@@ -299,7 +302,15 @@
       (send-heartbeat gateway seq-num)
       (async/alt!
         stop-heartbeat-channel (timbre/warn "Websocket closed! Terminating heartbeat channel...")
-        (async/timeout @heartbeat-interval) (recur)))
+        (async/timeout @heartbeat-interval)
+        ;; Clients can detect zombied or failed connections by listening for Opcode 11 Heartbeat ACK:
+        ;; If a client does not receive a heartbeat ack between its attempts at sending heartbeats, it should immediately
+        ;; terminate the connection with a non-1000 close code, reconnect, and attempt to resume.
+        (async/alt!
+          heartbeat-ack-channel (recur)
+          (async/timeout 1000)  (do
+                                  (timbre/warn "Heartbeat ack failed. Terminating...")
+                                  (System/exit 0)))))
 
     ;; Return the gateway that we created
     gateway))
