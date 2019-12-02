@@ -11,7 +11,7 @@
 (defprotocol DiscordClient
   (send-message [this channel content embed tts]))
 
-(defrecord GeneralDiscordClient [auth gateway message-handler send-channel receive-channel]
+(defrecord GeneralDiscordClient [auth gateway message-handler send-channel receive-channel close-channel]
   Authenticated
   (token [this]
     (types/token (:auth this)))
@@ -22,7 +22,8 @@
   (close [this]
     (.close gateway)
     (close! send-channel)
-    (close! receive-channel))
+    (close! receive-channel)
+    (close! close-channel))
 
   DiscordClient
   (send-message [this channel content embed tts]
@@ -53,8 +54,9 @@
   ([auth message-handler & {:keys [send-channel receive-channel] :as options}]
    (let [send-chan  (or (:send-channel options) (async/chan))
          recv-chan  (or (:receive-channel options) (async/chan))
-         gateway    (gw/connect-to-gateway auth recv-chan)
-         client     (GeneralDiscordClient. auth gateway message-handler send-chan recv-chan)]
+         close-chan (async/chan)
+         gateway    (gw/connect-to-gateway auth recv-chan close-chan)
+         client     (GeneralDiscordClient. auth gateway message-handler send-chan recv-chan close-chan)]
 
      ;; Send the identification message to Discord
      (gw/send-identify gateway)
@@ -76,6 +78,11 @@
            (send-message client channel content embed tts)
            (catch Exception e (timbre/errorf "Error sending message: %s" e)))
          (recur)))
+
+     (async/go
+       (async/<! close-chan)
+       (.close client)
+       (System/exit 0))
 
      ;; Return the client that we created
      client)))

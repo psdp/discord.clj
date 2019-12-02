@@ -44,13 +44,13 @@
   (send-message [this message]))
 
 (defrecord DiscordGateway [url shards websocket auth seq-num session-id heartbeat-interval
-                           stop-heartbeat-channel]
+                           stop-heartbeat-channel heartbeat-ack-channel]
   java.io.Closeable
   (close [this]
     (when (:websocket this)
       (ws/close @(:websocket this)))
-    (when (:stop-heartbeat-channel this)
-      (async/close! (:stop-heartbeat-channel this))))
+    (async/close! (:stop-heartbeat-channel this))
+    (async/close! (:heartbeat-ack-channel this)))
 
   Authenticated
   (token [this]
@@ -262,7 +262,7 @@
                         (reconnect-gateway gateway))
                       (do
                         (timbre/infof "Closing Gateway websocket, not reconnecting (%d)." status)
-                        (System/exit 0))))
+                        (async/>!! (:close-channel gateway) true))))
       :client client)))
 
 ;;; There are a few elements of state that a Discord gateway connection needs to track, such as
@@ -274,24 +274,26 @@
    auth : Authenticated -- An implementation of the Authenticated protcol to authenticate with the
       Discord APIs.
    receive-channel : Channel -- An asynchronous channel (core.async) that messages from the server
-      will be pushed onto."
-  [auth receive-channel]
+      will be pushed onto.
+   close-channel: Channel - An asynchronous channel (core.async)"
+  [auth receive-channel close-channel]
   (let [socket                 (atom nil)
         seq-num                (atom 0)
         heartbeat-interval     (atom 1000)
         stop-heartbeat-channel (async/chan)
         heartbeat-ack-channel  (async/chan)
         session-id             (atom nil)
-        gateway                (build-gateway (http/get-bot-gateway auth))
-        gateway                (assoc gateway
-                                      :auth                   auth
-                                      :session-id             session-id
-                                      :seq-num                seq-num
-                                      :heartbeat-interval     heartbeat-interval
-                                      :stop-heartbeat-channel stop-heartbeat-channel
-                                      :heartbeat-ack-channel  heartbeat-ack-channel
-                                      :receive-channel        receive-channel
-                                      :websocket              socket)
+        gateway                (-> (http/get-bot-gateway auth)
+                                   (assoc :auth                   auth
+                                          :session-id             session-id
+                                          :seq-num                seq-num
+                                          :heartbeat-interval     heartbeat-interval
+                                          :stop-heartbeat-channel stop-heartbeat-channel
+                                          :heartbeat-ack-channel  heartbeat-ack-channel
+                                          :receive-channel        receive-channel
+                                          :close-channel          close-channel
+                                          :websocket              socket)
+                                   build-gateway)
         websocket              (create-websocket gateway)]
 
     ;; Assign the connected websocket to the Gateway's socket field
