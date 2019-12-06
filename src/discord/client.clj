@@ -52,6 +52,7 @@
      (create-discord-client default-auth message-handler)))
 
   ([auth message-handler & {:keys [send-channel receive-channel] :as options}]
+   (timbre/debug "Creating bot client")
    (let [send-chan  (or (:send-channel options) (async/chan))
          recv-chan  (or (:receive-channel options) (async/chan))
          close-chan (async/chan)

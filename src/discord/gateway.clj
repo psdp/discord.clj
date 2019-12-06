@@ -246,6 +246,7 @@
         client          (new WebSocketClient (new SslContextFactory))]
     (.setMaxTextMessageSize (.getPolicy client) Integer/MAX_VALUE)
     (.start client)
+    (timbre/debug "Connecting to websocket")
     (ws/connect
       gateway-url
       :on-receive (fn [message]
