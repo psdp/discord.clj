@@ -108,6 +108,9 @@
   (async/go
     (async/>! heartbeat-ack-channel true)))
 
+(defmethod handle-gateway-control-event :invalidate-session [discord-event {:keys [close-channel]} receive-chan]
+  (async/>!! close-channel true))
+
 (defmethod handle-gateway-control-event :default
   [discord-event gateway receive-chan]
   (timbre/infof "Event of Type: %s" (message-code->name (:op discord-event))))
