@@ -241,6 +241,7 @@
 (defn- create-websocket
   "Creates websocket and connects to the Discord gateway."
   [gateway]
+  (timbre/debug "create-websocket")
   (let [receive-channel (:receive-channel gateway)
         gateway-url     (:url gateway)
         client          (new WebSocketClient (new SslContextFactory))]
@@ -278,6 +279,7 @@
       will be pushed onto.
    close-channel: Channel - An asynchronous channel (core.async)"
   [auth receive-channel close-channel]
+  (timbre/debug "connect-to-gateway")
   (let [socket                 (atom nil)
         seq-num                (atom 0)
         heartbeat-interval     (atom 1000)
