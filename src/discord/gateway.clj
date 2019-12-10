@@ -248,7 +248,7 @@
   (let [receive-channel (:receive-channel gateway)
         gateway-url     (:url gateway)
         client          (new WebSocketClient (new SslContextFactory))]
-    (.setMaxTextMessageSize (.getPolicy client) Integer/MAX_VALUE)
+    (.setMaxTextMessageSize (.getPolicy client) (* 1024 1024 1024))
     (.start client)
     (timbre/debug "Connecting to websocket")
     (ws/connect
