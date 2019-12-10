@@ -245,17 +245,26 @@
   "Creates websocket and connects to the Discord gateway."
   [gateway]
   (timbre/debug "create-websocket")
-  (let [receive-channel (:receive-channel gateway)
-        gateway-url     (:url gateway)
-        client          (new WebSocketClient (new SslContextFactory))]
+  (let [receive-channel   (:receive-channel gateway)
+        connected-channel (async/chan)
+        gateway-url       (:url gateway)
+        client            (new WebSocketClient (new SslContextFactory))]
     (.setMaxTextMessageSize (.getPolicy client) (* 1024 1024 1024))
     (.start client)
     (timbre/debug "Connecting to websocket")
+    (async/go
+      (async/alt!
+        connected-channel      nil
+        (async/timeout 10000)  (do
+                                (timbre/warn "Failed to connect to websocket...")
+                                (System/exit 0))))
     (ws/connect
       gateway-url
       :on-receive (fn [message]
                     (handle-message message gateway receive-channel))
-      :on-connect (fn [message] (timbre/info "Connected to Discord Gateway"))
+      :on-connect (fn [message]
+                    (timbre/info "Connected to Discord Gateway")
+                    (async/>!! connected-channel true))
       :on-error   (fn [message] (timbre/errorf "Error: %s" message))
       :on-close   (fn [status reason]
                     ;; The codes above 1001 denote erroreous closure states
