@@ -63,6 +63,7 @@
     (ws/send-msg @(:websocket this) (json/write-str message))))
 
 (defn build-gateway [gateway-response]
+  (timbre/debug "build-gateway")
   (let [gateway-map (into {} gateway-response)
         url         (format "%s?v=%s&encoding=%s" (:url gateway-map) types/api-version "json")]
     (map->DiscordGateway (assoc gateway-map :url url))))
