@@ -59,19 +59,12 @@
 (defn register-extension!
   "Creates a mapping between the supplied extension name and the handler function in the global
    extension registry."
-  ;; extension without options
-  ([extension-name extension-function]
-   (let [extension-map {:command  extension-name
-                        :handler  extension-function
-                        :options  nil}]
-     (swap! extension-registry conj extension-map)))
-
-  ;; extension with options
-  ([extension-name extension-function extension-options]
-   (let [extension-map {:command  extension-name
-                        :handler  extension-function
-                        :options  extension-options}]
-     (swap! extension-registry conj extension-map))))
+  [extension-name extension-function & [options extension?]]
+  (let [extension-map {:command    extension-name
+                       :handler    extension-function
+                       :options    nil
+                       :extension? (boolean extension?)}]
+    (swap! extension-registry conj extension-map)))
 
 (defn register-extension-docs!
   "Add the documentation for this particular extension to the global extension documentation
@@ -124,10 +117,15 @@
 (defn- dispatch-to-extensions
   "Dispatches to the supplied extensions."
   [client message prefix]
-  (doseq [{:keys [command handler] :as ext} (get-extensions)]
-    (let [command-string (str prefix (name command))]
-      (if (= (-> (:content message) utils/words first) command-string)
-        (handler client (trim-message-command message command-string))))))
+  (doseq [{:keys [command handler extension?] :as ext} (get-extensions)]
+    (let [command-string (str prefix (name command))
+          words (-> message :content utils/words)]
+      (if (= (first words) command-string)
+        (let [message (trim-message-command message command-string)]
+          (if extension?
+            (when-let [subcommand (second words)]
+              (handler subcommand client (trim-message-command message subcommand)))
+            (handler client message)))))))
 
 (defn- build-handler-fn
   "Builds a handler around a set of extensions and rebinds 'say' to send to the message source"
@@ -171,10 +169,8 @@
   "This function adds a catch-all error handling function for the extension to handle invalid
    subcommand input."
   [extension-name]
-  `(defmethod ~extension-name :default [_# message#]
-     (say (format "Unrecognized subcommand: %s"
-                  ~(name extension-name)
-                  (-> message# :content utils/words first)))))
+  `(defmethod ~extension-name :default [subcommand# ~'_ ~'_]
+     (timbre/infof "Unrecognized subcommand: %s" subcommand#)))
 
 (defn- emit-subcommand
   "For each of the defined subcommands, we need to define a multimethod that handles that
@@ -208,7 +204,7 @@
              (assoc current-val# :doc (str current-doc# ~command-doc)))))
 
        ;; Define the method for this particular dispatch value
-       (defmethod ~extension-name ~dispatch-val [~client-param ~message-param]
+       (defmethod ~extension-name ~dispatch-val [~'_ ~client-param ~message-param]
          ;; If docstring is provided to the command, we need to skip the first argument in
          ;; the implementation
          ~(if permissions
@@ -276,11 +272,11 @@
     `(do
        ;; Define the multimethod
        (defmulti ~(with-meta extension-fn-name m)
-         (fn [client# message#]
-           (-> message# :content utils/words first keyword)))
+         (fn [subcommand# client# message#]
+           (keyword subcommand#)))
 
        ;; Register the extension with the global extension hierarchy
-       (register-extension! ~(keyword extension-name) ~extension-fn-name ~options)
+       (register-extension! ~(keyword extension-name) ~extension-fn-name ~options true)
 
        ;; Supply a "default" error message responding back with an unknown command message
        ~(emit-subcommand-error extension-fn-name)
@@ -288,7 +284,7 @@
        ;; Add the docstring and the arglist to this command
        (alter-meta! (var ~extension-fn-name) assoc
                     :doc      (str ~docstring? "\n\nAvailable Subcommands:\n")
-                    :arglists (quote ([~client-param ~message-param])))
+                    :arglists (quote ([~'_ ~client-param ~message-param])))
 
        ;; Build the method implementations
        ~@(for [[dispatch-val & body] impls]
