@@ -180,8 +180,7 @@
   (let [body          body
         ;; Check for documentation at the top of the subcommand
         command-doc   (if (string? (first body))
-                        (format "\t%s: %s\n" (name dispatch-val) (first body))
-                        (format "\t%s\n" (name dispatch-val)))
+                        (first body))
         body          (if (string? (first body))
                         (rest body)
                         body)
@@ -197,11 +196,12 @@
         permissions   (get options :requires)]
     `(do
        ;; Add documentation for this command to the multimethod documentation
-       (alter-meta!
-         (var ~extension-name)
-         (fn [current-val#]
-           (let [current-doc# (:doc current-val#)]
-             (assoc current-val# :doc (str current-doc# ~command-doc)))))
+       (when ~command-doc
+         (alter-meta!
+          (var ~extension-name)
+          (fn [current-val#]
+            (let [current-doc# (:doc current-val#)]
+              (update current-val# :doc assoc (name ~dispatch-val) ~command-doc)))))
 
        ;; Define the method for this particular dispatch value
        (defmethod ~extension-name ~dispatch-val [~'_ ~client-param ~message-param]
@@ -283,7 +283,7 @@
 
        ;; Add the docstring and the arglist to this command
        (alter-meta! (var ~extension-fn-name) assoc
-                    :doc      (str ~docstring? "\n\nAvailable Subcommands:\n")
+                    :doc      {}
                     :arglists (quote ([~'_ ~client-param ~message-param])))
 
        ;; Build the method implementations
